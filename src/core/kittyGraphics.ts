@@ -15,6 +15,37 @@
 
 import fs from "node:fs";
 
+/**
+ * Write kitty control sequences without going through Node's buffered stdout
+ * stream, which can swallow writes if the process is killed mid-flush. Prefers
+ * /dev/tty (still reaches the terminal even if stdout is piped/redirected),
+ * and falls back to a direct synchronous write on FD 1 so the bytes hit the
+ * kernel before the next OpenTUI frame.
+ */
+let cachedTtyFd: number | null | undefined;
+function writeControl(bytes: string): void {
+  if (cachedTtyFd === undefined) {
+    try {
+      cachedTtyFd = fs.openSync("/dev/tty", "w");
+    } catch {
+      cachedTtyFd = null;
+    }
+  }
+  if (cachedTtyFd !== null && cachedTtyFd !== undefined) {
+    try {
+      fs.writeSync(cachedTtyFd, bytes);
+      return;
+    } catch {
+      // /dev/tty disappeared between opens — fall through.
+    }
+  }
+  try {
+    fs.writeSync(1, bytes);
+  } catch {
+    process.stdout.write(bytes);
+  }
+}
+
 /** Single placeholder character. Combined with diacritics to identify the image cell. */
 const PLACEHOLDER_CHAR = "\u{10EEEE}";
 
@@ -147,13 +178,18 @@ export function transmitImage({ imageId, filePath, columns, rows }: TransmitImag
   // i= image id; c= columns, r= rows define the grid placeholders will fill.
   const control = `a=T,q=2,U=1,f=100,t=f,i=${imageId},c=${columns},r=${rows}`;
   const sequence = `\x1b_G${control};${encodedPath}\x1b\\`;
-  process.stdout.write(sequence);
+  if (process.env.HUNK_KITTY_DEBUG) {
+    process.stderr.write(
+      `[kittyGraphics] transmit id=${imageId} path=${filePath} cols=${columns} rows=${rows} fdMode=${cachedTtyFd === null || cachedTtyFd === undefined ? "stdout" : "tty"}\n`,
+    );
+  }
+  writeControl(sequence);
   return true;
 }
 
 /** Tell the terminal to forget a previously-transmitted image. */
 export function deleteImage(imageId: number): void {
-  process.stdout.write(`\x1b_Ga=d,d=I,i=${imageId},q=2\x1b\\`);
+  writeControl(`\x1b_Ga=d,d=I,i=${imageId},q=2\x1b\\`);
 }
 
 let nextImageId = 1;
