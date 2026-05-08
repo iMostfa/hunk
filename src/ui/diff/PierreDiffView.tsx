@@ -1,15 +1,21 @@
 import { useMemo } from "react";
 import type { DiffFile, LayoutMode } from "../../core/types";
+import { terminalSupportsKittyGraphics } from "../../core/kittyGraphics";
 import { AgentInlineNote, AgentInlineNoteGuideCap } from "../components/panes/AgentInlineNote";
 import type { VisibleAgentNote } from "../lib/agentAnnotations";
 import { reviewRowId } from "../lib/ids";
 import type { AppTheme } from "../themes";
 import { findMaxLineNumber } from "./codeColumns";
+import { ImageDiffView } from "./ImageDiffView";
 import { buildSplitRows, buildStackRows } from "./pierre";
 import { plannedReviewRowVisible } from "./plannedReviewRows";
 import { buildReviewRenderPlan } from "./reviewRenderPlan";
 import { diffMessage, DiffRowView, fitText } from "./renderRows";
 import { useHighlightedDiff } from "./useHighlightedDiff";
+
+// Probe once per process — env vars don't change, so caching skips work on every
+// render of every file pane.
+const KITTY_GRAPHICS_AVAILABLE = terminalSupportsKittyGraphics();
 
 const EMPTY_ANNOTATED_HUNK_INDICES = new Set<number>();
 const EMPTY_VISIBLE_AGENT_NOTES: VisibleAgentNote[] = [];
@@ -84,6 +90,9 @@ export function PierreDiffView({
   }
 
   if (file.metadata.hunks.length === 0) {
+    if (file.isBinary && file.imageBlobs && KITTY_GRAPHICS_AVAILABLE) {
+      return <ImageDiffView file={file} width={width} theme={theme} />;
+    }
     return (
       <box style={{ width: "100%", paddingLeft: 1, paddingRight: 1, paddingBottom: 1 }}>
         <text fg={theme.muted}>{fitText(diffMessage(file), Math.max(1, width - 2))}</text>

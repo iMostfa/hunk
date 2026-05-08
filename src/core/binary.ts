@@ -1,8 +1,29 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
 import fs from "node:fs";
+import path from "node:path";
 
 const BINARY_SNIFF_BYTES = 8_000;
 const BINARY_CONTROL_BYTE_RATIO = 0.3;
+
+/** File extensions kitty graphics can render directly. */
+const IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".bmp",
+  ".tiff",
+  ".tif",
+]);
+
+/**
+ * True when the file extension hints at an image format kitty's `t=f` transmit
+ * accepts directly. Avoids opening the file — we only want a fast tag.
+ */
+export function isImageFile(filePath: string): boolean {
+  return IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
 
 /** Return whether one diff patch explicitly marks the file contents as binary. */
 export function patchLooksBinary(patch: string) {

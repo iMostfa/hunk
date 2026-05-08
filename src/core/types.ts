@@ -28,6 +28,13 @@ export interface AgentContext {
   files: AgentFileContext[];
 }
 
+export interface ImageBlobs {
+  /** Absolute path to the "before" image on disk (undefined for new files). */
+  left?: string;
+  /** Absolute path to the "after" image on disk (undefined for deletions). */
+  right?: string;
+}
+
 export interface DiffFile {
   id: string;
   path: string;
@@ -42,6 +49,8 @@ export interface DiffFile {
   agent: AgentFileContext | null;
   isUntracked?: boolean;
   isBinary?: boolean;
+  /** Absolute paths to the original image bytes when the binary is renderable. */
+  imageBlobs?: ImageBlobs;
 }
 
 export interface Changeset {

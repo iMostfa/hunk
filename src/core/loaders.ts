@@ -8,7 +8,7 @@ import {
 import { createTwoFilesPatch } from "diff";
 import { resolve as resolvePath } from "node:path";
 import { findAgentFileContext, loadAgentContext } from "./agent";
-import { createSkippedBinaryMetadata, isProbablyBinaryFile, patchLooksBinary } from "./binary";
+import { createSkippedBinaryMetadata, isImageFile, isProbablyBinaryFile, patchLooksBinary } from "./binary";
 import { normalizeDiffMetadataPaths, normalizeDiffPath } from "./diffPaths";
 import { HunkUserError } from "./errors";
 import {
@@ -205,6 +205,7 @@ interface BuildDiffFileOptions {
   isUntracked?: boolean;
   previousPath?: string;
   isBinary?: boolean;
+  imageBlobs?: { left?: string; right?: string };
 }
 
 /** Build the normalized per-file model used by the UI regardless of input mode. */
@@ -214,7 +215,7 @@ function buildDiffFile(
   index: number,
   sourcePrefix: string,
   agentContext: AgentContext | null,
-  { isUntracked, previousPath, isBinary }: BuildDiffFileOptions = {},
+  { isUntracked, previousPath, isBinary, imageBlobs }: BuildDiffFileOptions = {},
 ): DiffFile {
   const normalizedMetadata = normalizeDiffMetadataPaths(metadata);
   const path = normalizedMetadata.name;
@@ -231,6 +232,7 @@ function buildDiffFile(
     agent: findAgentFileContext(agentContext, path, resolvedPreviousPath),
     isUntracked,
     isBinary: isBinary ?? patchLooksBinary(patch),
+    imageBlobs,
   };
 }
 
@@ -434,6 +436,15 @@ function buildBinaryFileDiffChangeset(
   rightPath: string,
   agentContext: AgentContext | null,
 ) {
+  // Capture the on-disk paths so the renderer can transmit images to the
+  // terminal without re-resolving them from a (potentially stale) cwd.
+  const imageBlobs = isImageFile(displayPath)
+    ? {
+        left: leftPath !== "/dev/null" ? leftPath : undefined,
+        right: rightPath !== "/dev/null" ? rightPath : undefined,
+      }
+    : undefined;
+
   return {
     id: `pair:${displayPath}`,
     sourceLabel: input.kind === "difftool" ? "git difftool" : "file compare",
@@ -449,6 +460,7 @@ function buildBinaryFileDiffChangeset(
         {
           previousPath: basename(input.left),
           isBinary: true,
+          imageBlobs,
         },
       ),
     ],
